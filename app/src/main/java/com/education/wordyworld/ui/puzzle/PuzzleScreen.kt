@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -155,7 +156,8 @@ private fun LettersGrid(state: PuzzleUiState, onSelectLetter: (Int) -> Unit) {
                     LetterTile(
                         character = character,
                         enabled = index < letters.size && index !in state.usedLetterIndices && !state.isCelebrationLocked,
-                        onClick = { onSelectLetter(index) }
+                        onClick = { onSelectLetter(index) },
+                        modifier = Modifier.weight(1f)
                     )
                 }
                 if (row.size < columns) {
@@ -173,12 +175,16 @@ private fun LettersGrid(state: PuzzleUiState, onSelectLetter: (Int) -> Unit) {
 }
 
 @Composable
-private fun LetterTile(character: Char, enabled: Boolean, onClick: () -> Unit) {
+private fun LetterTile(
+    character: Char,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     FilledTonalButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier
-            .weight(1f)
+        modifier = modifier
             .height(56.dp)
     ) {
         Text(
