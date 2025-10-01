@@ -12,9 +12,13 @@ data class WordPuzzle(
     val title: String,
     val difficulty: PuzzleDifficulty,
     val rewardStickerId: Int,
-    val grid: List<String>,
-    val words: List<String>
-)
+    val targetWord: String,
+    val hint: String,
+    val allowedGuesses: Int = 6,
+    val validGuesses: Set<String> = emptySet()
+) {
+    val wordLength: Int get() = targetWord.length
+}
 
 data class Sticker(
     val id: Int,

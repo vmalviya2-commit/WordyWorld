@@ -44,7 +44,7 @@ fun HomeScreen(
     val mascotMessage = if (state.completedToday) {
         "You finished today's challenge! Try a new puzzle or decorate your album."
     } else if (state.hasCompletedCurrentPuzzle) {
-        "Great work! Replay the jungle hunt or explore rewards."
+        "Great work! Ready for another word quest?"
     } else {
         "Let's solve today's puzzle together!"
     }
@@ -146,12 +146,12 @@ private fun DailyPuzzleCard(state: PuzzleUiState, onStartPuzzle: () -> Unit) {
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Grid: ${puzzle.grid.size} x ${puzzle.grid.firstOrNull()?.length ?: puzzle.grid.size} • Difficulty: ${puzzle.difficulty.name.lowercase().replaceFirstChar { it.titlecase() }}",
+                text = "Word length: ${puzzle.wordLength} • Difficulty: ${puzzle.difficulty.name.lowercase().replaceFirstChar { it.titlecase() }}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.secondary
             )
             Text(
-                text = "Words to find: ${puzzle.words.size} ( ${state.remainingWords} left )",
+                text = "Guesses used: ${state.usedGuesses}/${puzzle.allowedGuesses}",
                 style = MaterialTheme.typography.bodyMedium
             )
             Button(

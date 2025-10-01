@@ -11,11 +11,12 @@ import com.education.wordyworld.model.WordPuzzle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.abs
+import kotlin.math.max
 
 private const val INITIAL_STREAK = 3
-private const val WORD_SCORE = 100
-private const val INCORRECT_PENALTY = 10
+private const val BASE_SCORE = 600
+private const val SCORE_DECREMENT = 60
+private const val MIN_SCORE = 120
 
 class PuzzleViewModel(
     private val puzzleRepository: PuzzleRepository = PuzzleRepository()
@@ -34,120 +35,105 @@ class PuzzleViewModel(
         startTimer()
     }
 
-    private fun createInitialState(): PuzzleUiState {
-        val startingPuzzle = puzzles.first()
-        return PuzzleUiState(
-            currentPuzzle = startingPuzzle,
-            totalPuzzles = puzzles.size,
-            dailyPuzzleId = dailyPuzzleId,
-            streakCount = INITIAL_STREAK
-        )
+    fun inputLetter(letter: Char) {
+        val state = uiState
+        if (state.isInteractionLocked) return
+        val normalized = letter.uppercaseChar()
+        if (!normalized.isLetter()) return
+        if (state.currentInput.length >= state.currentPuzzle.wordLength) return
+        updateCurrentInput(state.currentInput + normalized)
     }
 
-    fun startSelection(position: GridPosition) {
+    fun deleteLetter() {
         val state = uiState
-        if (state.isCelebrationLocked || state.isPaused) return
-        if (!position.isValidFor(state.currentPuzzle)) return
-        val letter = state.currentPuzzle.letterAt(position)
-        uiState = state.copy(
-            activePath = listOf(position),
-            activeWord = letter.toString(),
-            feedbackMessage = null,
-            hintPosition = null
-        )
+        if (state.isInteractionLocked) return
+        if (state.currentInput.isEmpty()) return
+        updateCurrentInput(state.currentInput.dropLast(1))
     }
 
-    fun continueSelection(position: GridPosition) {
+    fun submitGuess() {
         val state = uiState
-        if (state.isCelebrationLocked || state.isPaused) return
+        if (state.isInteractionLocked) return
         val puzzle = state.currentPuzzle
-        if (!position.isValidFor(puzzle)) return
-        val path = state.activePath
-        if (path.isEmpty()) {
-            startSelection(position)
+        val guess = state.currentInput
+        if (guess.length < puzzle.wordLength) {
+            uiState = state.copy(
+                feedbackMessage = "Add more letters to guess the ${puzzle.wordLength}-letter word.",
+                isFeedbackPositive = false
+            )
             return
         }
-        val last = path.last()
-        if (position == last) return
-        if (!last.isNeighborOf(position)) return
-        val newPath = when {
-            path.contains(position) -> return
-            path.size >= 2 -> {
-                val expectedDirection = directionOf(path[path.size - 2], last)
-                val newDirection = directionOf(last, position)
-                if (expectedDirection != newDirection) return
-                path + position
-            }
-            else -> path + position
+        if (puzzle.validGuesses.isNotEmpty() && guess !in puzzle.validGuesses) {
+            uiState = state.copy(
+                feedbackMessage = "That word isn't in today's list. Try another!",
+                isFeedbackPositive = false
+            )
+            return
         }
-        val newWord = newPath.toWord(puzzle)
-        uiState = state.copy(
-            activePath = newPath,
-            activeWord = newWord,
-            feedbackMessage = null
+
+        val evaluation = evaluateGuess(puzzle.targetWord.uppercase(), guess)
+        val updatedRows = state.guessRows.toMutableList()
+        updatedRows[state.currentRowIndex] = GuessRow(
+            letters = List(puzzle.wordLength) { index -> guess[index] as Char? },
+            feedback = evaluation,
+            isSubmitted = true
         )
-    }
+        val updatedKeyboard = mergeKeyboardState(state.keyboardState, guess, evaluation)
+        val usedGuesses = state.usedGuesses + 1
+        val solved = guess == puzzle.targetWord.uppercase()
 
-    fun endSelection() {
-        val state = uiState
-        if (state.activePath.isEmpty()) return
-        val puzzle = state.currentPuzzle
-        val candidate = state.activeWord.uppercase()
-        val words = puzzle.words
-        val matchedWord = when {
-            candidate in words -> candidate
-            candidate.reversed() in words -> candidate.reversed()
-            else -> null
+        val solvedIds = if (solved) state.solvedPuzzleIds + puzzle.id else state.solvedPuzzleIds
+        val unlocked = if (solved && puzzle.rewardStickerId !in state.unlockedStickerIds) {
+            state.unlockedStickerIds + puzzle.rewardStickerId
+        } else {
+            state.unlockedStickerIds
         }
-
-        val alreadyFound = matchedWord != null && matchedWord in state.foundWords
-        val isNewWord = matchedWord != null && !alreadyFound
-
-        val updatedState = when {
-            isNewWord -> handleNewWord(state, matchedWord!!)
-            alreadyFound -> state.copy(
-                feedbackMessage = "You already found ${matchedWord}!",
-                isFeedbackPositive = false,
-                activePath = emptyList(),
-                activeWord = ""
-            )
-            candidate.length <= 1 -> state.copy(
-                feedbackMessage = "Keep dragging across the letters to make a word!",
-                isFeedbackPositive = false,
-                activePath = emptyList(),
-                activeWord = ""
-            )
-            else -> state.copy(
-                feedbackMessage = "That's not on the list yet. Try a new path!",
-                isFeedbackPositive = false,
-                activePath = emptyList(),
-                activeWord = "",
-                score = (state.score - INCORRECT_PENALTY).coerceAtLeast(0)
-            )
+        val newStreak = when {
+            solved && puzzle.id !in state.solvedPuzzleIds -> state.streakCount + 1
+            !solved && usedGuesses >= puzzle.allowedGuesses -> max(0, state.streakCount - 1)
+            else -> state.streakCount
         }
+        val completedToday = state.completedToday || (solved && puzzle.id == dailyPuzzleId)
 
-        uiState = updatedState
+        val gainedScore = if (solved) {
+            val provisional = BASE_SCORE - (usedGuesses - 1) * SCORE_DECREMENT
+            max(MIN_SCORE, provisional)
+        } else 0
+
+        val nextRowIndex = (state.currentRowIndex + 1).coerceAtMost(puzzle.allowedGuesses - 1)
+        val shouldAdvanceRow = !solved && usedGuesses < puzzle.allowedGuesses
+        val resetInput = ""
+
+        uiState = state.copy(
+            guessRows = updatedRows,
+            keyboardState = updatedKeyboard,
+            currentRowIndex = if (shouldAdvanceRow) nextRowIndex else state.currentRowIndex,
+            currentInput = resetInput,
+            feedbackMessage = when {
+                solved -> "You solved it in $usedGuesses tries!"
+                usedGuesses >= puzzle.allowedGuesses -> "Out of guesses! The word was ${puzzle.targetWord.uppercase()}."
+                else -> "Not quite. Keep going!"
+            },
+            isFeedbackPositive = solved,
+            score = state.score + gainedScore,
+            solvedPuzzleIds = solvedIds,
+            unlockedStickerIds = unlocked,
+            streakCount = newStreak,
+            completedToday = completedToday
+        )
     }
 
     fun revealHint() {
         val state = uiState
-        val remaining = state.currentPuzzle.words.filterNot { it in state.foundWords }
-        if (remaining.isEmpty()) {
-            uiState = state.copy(
-                feedbackMessage = "All words found! Try a new puzzle for more fun.",
-                isFeedbackPositive = true,
-                hintPosition = null
-            )
-            return
+        val message = if (state.hintRevealed) {
+            "Hint already revealed: starts with ${state.currentPuzzle.targetWord.first().uppercaseChar()}"
+        } else {
+            "Hint: starts with ${state.currentPuzzle.targetWord.first().uppercaseChar()} and ${state.currentPuzzle.hint.lowercase()}"
         }
-        val target = remaining.random()
-        val path = findWordPath(state.currentPuzzle, target)
-        val hintPosition = path?.firstOrNull()
         uiState = state.copy(
-            hintPosition = hintPosition,
-            feedbackMessage = hintPosition?.let { "Hint: Look for the glowing ${target.first()}!" }
-                ?: "Try hunting for ${target.first()}...",
-            isFeedbackPositive = true
+            feedbackMessage = message,
+            isFeedbackPositive = true,
+            hintRevealed = true
         )
     }
 
@@ -159,17 +145,17 @@ class PuzzleViewModel(
     fun resetCurrentPuzzle() {
         val state = uiState
         uiState = state.copy(
-            foundWords = emptySet(),
-            foundWordPaths = emptyMap(),
-            activePath = emptyList(),
-            activeWord = "",
+            guessRows = buildGuessRows(state.currentPuzzle.wordLength, state.currentPuzzle.allowedGuesses),
+            currentRowIndex = 0,
+            currentInput = "",
+            keyboardState = emptyMap(),
             feedbackMessage = null,
             isFeedbackPositive = false,
-            hintPosition = null,
-            score = 0,
+            hintRevealed = false,
             elapsedSeconds = 0,
             isPaused = false
         )
+        startTimer()
     }
 
     fun goToNextPuzzle() {
@@ -180,61 +166,34 @@ class PuzzleViewModel(
         val nextPuzzle = puzzles[currentPuzzleIndex]
         uiState = state.copy(
             currentPuzzle = nextPuzzle,
-            foundWords = emptySet(),
-            foundWordPaths = emptyMap(),
-            activePath = emptyList(),
-            activeWord = "",
+            guessRows = buildGuessRows(nextPuzzle.wordLength, nextPuzzle.allowedGuesses),
+            currentRowIndex = 0,
+            currentInput = "",
+            keyboardState = emptyMap(),
             feedbackMessage = null,
             isFeedbackPositive = false,
-            hintPosition = null,
-            score = 0,
+            hintRevealed = false,
             elapsedSeconds = 0,
             isPaused = false
         )
         startTimer()
     }
 
-    private fun handleNewWord(state: PuzzleUiState, word: String): PuzzleUiState {
-        val updatedFound = state.foundWords + word
-        val updatedPaths = state.foundWordPaths + (word to state.activePath)
-        val puzzleSolved = updatedFound.size == state.currentPuzzle.words.size
-        val alreadyCompleted = state.currentPuzzle.id in state.solvedPuzzleIds
-        val solvedIds = if (puzzleSolved && !alreadyCompleted) {
-            state.solvedPuzzleIds + state.currentPuzzle.id
-        } else {
-            state.solvedPuzzleIds
+    private fun updateCurrentInput(value: String) {
+        val state = uiState
+        val capped = value.take(state.currentPuzzle.wordLength)
+        val updatedRows = state.guessRows.toMutableList()
+        val letters = MutableList(state.currentPuzzle.wordLength) { index ->
+            capped.getOrNull(index)?.uppercaseChar()
         }
-        val unlocked = if (puzzleSolved && !alreadyCompleted) {
-            state.unlockedStickerIds + state.currentPuzzle.rewardStickerId
-        } else {
-            state.unlockedStickerIds
-        }
-        val newStreak = if (puzzleSolved && !alreadyCompleted) {
-            state.streakCount + 1
-        } else {
-            state.streakCount
-        }
-        val completedToday = state.completedToday || (
-            puzzleSolved && !alreadyCompleted && state.currentPuzzle.id == dailyPuzzleId
+        updatedRows[state.currentRowIndex] = state.guessRows[state.currentRowIndex].copy(
+            letters = letters,
+            isSubmitted = false
         )
-
-        return state.copy(
-            foundWords = updatedFound,
-            foundWordPaths = updatedPaths,
-            feedbackMessage = if (puzzleSolved) {
-                "Amazing! You solved every word in ${state.currentPuzzle.title}!"
-            } else {
-                "Great job! $word is checked off."
-            },
-            isFeedbackPositive = true,
-            score = state.score + WORD_SCORE,
-            activePath = emptyList(),
-            activeWord = "",
-            solvedPuzzleIds = solvedIds,
-            unlockedStickerIds = unlocked,
-            streakCount = newStreak,
-            completedToday = completedToday,
-            hintPosition = null
+        uiState = state.copy(
+            guessRows = updatedRows,
+            currentInput = capped,
+            feedbackMessage = null
         )
     }
 
@@ -244,11 +203,22 @@ class PuzzleViewModel(
             while (true) {
                 delay(1_000)
                 val state = uiState
-                if (!state.isPaused && !state.isCurrentPuzzleSolved) {
+                if (!state.isPaused && !state.isCurrentPuzzleSolved && !state.isOutOfGuesses) {
                     uiState = state.copy(elapsedSeconds = state.elapsedSeconds + 1)
                 }
             }
         }
+    }
+
+    private fun createInitialState(): PuzzleUiState {
+        val startingPuzzle = puzzles.first()
+        return PuzzleUiState(
+            currentPuzzle = startingPuzzle,
+            guessRows = buildGuessRows(startingPuzzle.wordLength, startingPuzzle.allowedGuesses),
+            totalPuzzles = puzzles.size,
+            dailyPuzzleId = dailyPuzzleId,
+            streakCount = INITIAL_STREAK
+        )
     }
 
     private fun findNextPuzzleIndex(state: PuzzleUiState): Int {
@@ -267,106 +237,65 @@ class PuzzleViewModel(
         return currentPuzzleIndex
     }
 
-    private fun GridPosition.isValidFor(puzzle: WordPuzzle): Boolean {
-        val rows = puzzle.grid.size
-        val columns = puzzle.grid.firstOrNull()?.length ?: 0
-        return row in 0 until rows && column in 0 until columns
-    }
+    private fun evaluateGuess(target: String, guess: String): List<LetterFeedback> {
+        val length = target.length
+        val result = MutableList(length) { LetterFeedback.Absent }
+        val targetChars = target.toCharArray()
+        val consumed = BooleanArray(length)
 
-    private fun WordPuzzle.letterAt(position: GridPosition): Char {
-        return grid[position.row][position.column]
-    }
-
-    private fun List<GridPosition>.toWord(puzzle: WordPuzzle): String {
-        if (isEmpty()) return ""
-        return buildString(size) {
-            for (position in this@toWord) {
-                append(puzzle.letterAt(position))
+        for (index in 0 until length) {
+            if (guess[index] == target[index]) {
+                result[index] = LetterFeedback.Correct
+                consumed[index] = true
             }
         }
-    }
-
-    private fun GridPosition.isNeighborOf(other: GridPosition): Boolean {
-        val rowDiff = abs(row - other.row)
-        val columnDiff = abs(column - other.column)
-        return (rowDiff != 0 || columnDiff != 0) && rowDiff <= 1 && columnDiff <= 1
-    }
-
-    private fun directionOf(from: GridPosition, to: GridPosition): GridDirection {
-        return GridDirection((to.row - from.row).sign(), (to.column - from.column).sign())
-    }
-
-    private fun findWordPath(puzzle: WordPuzzle, word: String): List<GridPosition>? {
-        if (puzzle.grid.isEmpty()) return null
-        val rows = puzzle.grid.size
-        val columns = puzzle.grid.first().length
-        val searchTargets = listOf(word.uppercase(), word.uppercase().reversed())
-        val directions = listOf(
-            GridDirection(-1, -1),
-            GridDirection(-1, 0),
-            GridDirection(-1, 1),
-            GridDirection(0, -1),
-            GridDirection(0, 1),
-            GridDirection(1, -1),
-            GridDirection(1, 0),
-            GridDirection(1, 1)
-        )
-
-        for (target in searchTargets) {
-            for (row in 0 until rows) {
-                for (column in 0 until columns) {
-                    if (puzzle.grid[row][column] != target[0]) continue
-                    for (direction in directions) {
-                        var currentRow = row
-                        var currentColumn = column
-                        val path = mutableListOf<GridPosition>()
-                        var matched = true
-                        for (character in target) {
-                            if (currentRow !in 0 until rows || currentColumn !in 0 until columns) {
-                                matched = false
-                                break
-                            }
-                            if (puzzle.grid[currentRow][currentColumn] != character) {
-                                matched = false
-                                break
-                            }
-                            path += GridPosition(currentRow, currentColumn)
-                            currentRow += direction.rowDelta
-                            currentColumn += direction.columnDelta
-                        }
-                        if (matched) {
-                            return path
-                        }
-                    }
-                }
+        for (index in 0 until length) {
+            if (result[index] == LetterFeedback.Correct) continue
+            val guessChar = guess[index]
+            val matchIndex = targetChars.indices.firstOrNull { i -> !consumed[i] && targetChars[i] == guessChar }
+            if (matchIndex != null) {
+                consumed[matchIndex] = true
+                result[index] = LetterFeedback.Present
             }
         }
-        return null
+        return result
     }
-}
 
-data class GridPosition(val row: Int, val column: Int)
+    private fun mergeKeyboardState(
+        existing: Map<Char, LetterFeedback>,
+        guess: String,
+        evaluation: List<LetterFeedback>
+    ): Map<Char, LetterFeedback> {
+        val updated = existing.toMutableMap()
+        guess.forEachIndexed { index, char ->
+            val feedback = evaluation[index]
+            val prior = updated[char]
+            if (prior == null || feedback.priority > prior.priority) {
+                updated[char] = feedback
+            }
+        }
+        return updated
+    }
 
-private data class GridDirection(val rowDelta: Int, val columnDelta: Int)
-
-private fun Int.sign(): Int = when {
-    this > 0 -> 1
-    this < 0 -> -1
-    else -> 0
+    companion object {
+        private fun buildGuessRows(wordLength: Int, allowedGuesses: Int): List<GuessRow> {
+            return List(allowedGuesses) { GuessRow.empty(wordLength) }
+        }
+    }
 }
 
 data class PuzzleUiState(
     val currentPuzzle: WordPuzzle,
-    val foundWords: Set<String> = emptySet(),
-    val foundWordPaths: Map<String, List<GridPosition>> = emptyMap(),
-    val activePath: List<GridPosition> = emptyList(),
-    val activeWord: String = "",
+    val guessRows: List<GuessRow>,
+    val currentRowIndex: Int = 0,
+    val currentInput: String = "",
+    val keyboardState: Map<Char, LetterFeedback> = emptyMap(),
     val score: Int = 0,
     val elapsedSeconds: Int = 0,
     val isPaused: Boolean = false,
     val feedbackMessage: String? = null,
     val isFeedbackPositive: Boolean = false,
-    val hintPosition: GridPosition? = null,
+    val hintRevealed: Boolean = false,
     val streakCount: Int = INITIAL_STREAK,
     val totalPuzzles: Int = 0,
     val dailyPuzzleId: Int,
@@ -375,9 +304,31 @@ data class PuzzleUiState(
     val completedToday: Boolean = false
 ) {
     val solvedCount: Int get() = solvedPuzzleIds.size
-    val remainingWords: Int get() = currentPuzzle.words.size - foundWords.size
     val hasCompletedCurrentPuzzle: Boolean get() = currentPuzzle.id in solvedPuzzleIds
-    val isCurrentPuzzleSolved: Boolean get() = foundWords.size == currentPuzzle.words.size
-    val isCelebrationLocked: Boolean get() = isCurrentPuzzleSolved
+    val isCurrentPuzzleSolved: Boolean get() = hasCompletedCurrentPuzzle
+    val usedGuesses: Int get() = guessRows.count { it.isSubmitted }
+    val remainingGuesses: Int get() = currentPuzzle.allowedGuesses - usedGuesses
+    val isOutOfGuesses: Boolean get() = !isCurrentPuzzleSolved && usedGuesses >= currentPuzzle.allowedGuesses
+    val isInteractionLocked: Boolean get() = isPaused || isCurrentPuzzleSolved || isOutOfGuesses
 }
 
+enum class LetterFeedback(val priority: Int) {
+    Idle(0),
+    Absent(1),
+    Present(2),
+    Correct(3)
+}
+
+data class GuessRow(
+    val letters: List<Char?>,
+    val feedback: List<LetterFeedback>,
+    val isSubmitted: Boolean
+) {
+    companion object {
+        fun empty(wordLength: Int): GuessRow = GuessRow(
+            letters = List(wordLength) { null },
+            feedback = List(wordLength) { LetterFeedback.Idle },
+            isSubmitted = false
+        )
+    }
+}

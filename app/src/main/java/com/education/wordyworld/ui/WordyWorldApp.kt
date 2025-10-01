@@ -131,9 +131,9 @@ private fun WordyWorldNavHost(
             PuzzleScreen(
                 state = puzzleState,
                 stickers = stickers,
-                onStartSelection = puzzleViewModel::startSelection,
-                onContinueSelection = puzzleViewModel::continueSelection,
-                onEndSelection = puzzleViewModel::endSelection,
+                onLetter = puzzleViewModel::inputLetter,
+                onSubmit = puzzleViewModel::submitGuess,
+                onDelete = puzzleViewModel::deleteLetter,
                 onRevealHint = puzzleViewModel::revealHint,
                 onTogglePause = puzzleViewModel::togglePause,
                 onNextPuzzle = puzzleViewModel::goToNextPuzzle,
