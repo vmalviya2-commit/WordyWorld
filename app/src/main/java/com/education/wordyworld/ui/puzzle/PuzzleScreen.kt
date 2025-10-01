@@ -358,10 +358,11 @@ private fun WordSearchGrid(
                         }
                     }
                 }
+                val activePathColor = MaterialTheme.colorScheme.secondary
                 Canvas(modifier = Modifier.matchParentSize()) {
                     state.activePath.zipWithNext { start, end ->
                         drawLine(
-                            color = MaterialTheme.colorScheme.secondary,
+                            color = activePathColor,
                             start = start.toCenterOffset(cellSizePx, spacingPx),
                             end = end.toCenterOffset(cellSizePx, spacingPx),
                             strokeWidth = strokeWidth,
