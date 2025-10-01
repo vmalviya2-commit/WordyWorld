@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -178,29 +177,33 @@ private fun ProgressOverviewRow(
         OverviewStatCard(
             title = "Puzzles Solved",
             value = "$solved / $total",
-            accent = "🧠"
+            accent = "🧠",
+            modifier = Modifier.weight(1f)
         )
         OverviewStatCard(
             title = "Sticker Count",
             value = "$unlockedStickers",
-            accent = "🌈"
+            accent = "🌈",
+            modifier = Modifier.weight(1f)
         )
         OverviewStatCard(
             title = "Streak",
             value = "$streakCount",
-            accent = "🔥"
+            accent = "🔥",
+            modifier = Modifier.weight(1f)
         )
     }
 }
 
 @Composable
-private fun RowScope.OverviewStatCard(
+private fun OverviewStatCard(
     title: String,
     value: String,
-    accent: String
+    accent: String,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier.weight(1f),
+        modifier = modifier,
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
