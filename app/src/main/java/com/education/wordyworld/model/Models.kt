@@ -10,11 +10,10 @@ data class WordPuzzle(
     val id: Int,
     val theme: String,
     val title: String,
-    val solution: String,
-    val hint: String,
     val difficulty: PuzzleDifficulty,
     val rewardStickerId: Int,
-    val scrambledLetters: List<Char>
+    val grid: List<String>,
+    val words: List<String>
 )
 
 data class Sticker(

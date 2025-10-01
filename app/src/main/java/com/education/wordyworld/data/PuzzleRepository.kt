@@ -2,79 +2,103 @@ package com.education.wordyworld.data
 
 import com.education.wordyworld.model.PuzzleDifficulty
 import com.education.wordyworld.model.WordPuzzle
-import kotlin.random.Random
 
 class PuzzleRepository {
     private val puzzles = listOf(
-        createPuzzle(
+        WordPuzzle(
             id = 1,
             theme = "Safari Buddies",
-            title = "Roaring Pal",
-            solution = "LION",
-            hint = "The jungle's brave leader.",
+            title = "Jungle Word Hunt",
             difficulty = PuzzleDifficulty.EASY,
-            rewardStickerId = 1
+            rewardStickerId = 1,
+            grid = listOf(
+                "ABRMYEKNOM",
+                "TTORRAPAFK",
+                "RGIRAFFENQ",
+                "RJALEMURXB",
+                "AERENZMHMI",
+                "NKBAIOILTG",
+                "EAEDAPIKDC",
+                "YNZHPQWLLJ",
+                "HSNOTIGERA",
+                "VHGHBPMKLW"
+            ),
+            words = listOf(
+                "LION",
+                "ZEBRA",
+                "HIPPO",
+                "GIRAFFE",
+                "PARROT",
+                "MONKEY",
+                "TIGER",
+                "SNAKE",
+                "LEMUR",
+                "HYENA"
+            )
         ),
-        createPuzzle(
+        WordPuzzle(
             id = 2,
             theme = "Ocean Wonders",
-            title = "Playful Swimmer",
-            solution = "DOLPHIN",
-            hint = "Smart friend that flips in the sea.",
+            title = "Splashy Search",
             difficulty = PuzzleDifficulty.MEDIUM,
-            rewardStickerId = 2
+            rewardStickerId = 2,
+            grid = listOf(
+                "EMDOLPHINB",
+                "LOQPFZWXBV",
+                "ABCWRCRABA",
+                "HSGTMCORAL",
+                "WIHROBPTGV",
+                "MUEAKPZOAD",
+                "BEAARMUDXR",
+                "FGBWOKBSMR",
+                "YDIUQSPPAA",
+                "LAESLMZWIY"
+            ),
+            words = listOf(
+                "DOLPHIN",
+                "SHARK",
+                "OCTOPUS",
+                "WHALE",
+                "CORAL",
+                "REEF",
+                "SEAL",
+                "CRAB",
+                "SQUID",
+                "RAY"
+            )
         ),
-        createPuzzle(
+        WordPuzzle(
             id = 3,
-            theme = "Garden Party",
-            title = "Glow Time",
-            solution = "FIREFLY",
-            hint = "Lights up the night like a tiny lantern.",
-            difficulty = PuzzleDifficulty.MEDIUM,
-            rewardStickerId = 3
-        ),
-        createPuzzle(
-            id = 4,
-            theme = "Space Explorers",
-            title = "Moon Hopper",
-            solution = "ASTRONAUT",
-            hint = "Floats in space and wears a shiny suit.",
-            difficulty = PuzzleDifficulty.HARD,
-            rewardStickerId = 4
-        ),
-        createPuzzle(
-            id = 5,
             theme = "Snack Attack",
-            title = "Crunch Time",
-            solution = "CARROT",
-            hint = "Bunnies munch it for a crunchy treat.",
+            title = "Tasty Treat Trail",
             difficulty = PuzzleDifficulty.EASY,
-            rewardStickerId = 5
+            rewardStickerId = 5,
+            grid = listOf(
+                "LGNGRAPEKM",
+                "LXCARROTRM",
+                "SIQJQCPGYT",
+                "EKWAEDBHRD",
+                "SJMELONCRJ",
+                "EDAERBTAEQ",
+                "ELPPACHEBI",
+                "HBANANAPGK",
+                "COLIVEIMJZ",
+                "GZTPIIXPDK"
+            ),
+            words = listOf(
+                "CARROT",
+                "APPLE",
+                "BREAD",
+                "CHEESE",
+                "GRAPE",
+                "PEACH",
+                "BANANA",
+                "BERRY",
+                "OLIVE",
+                "MELON"
+            )
         )
     )
-
-    private fun createPuzzle(
-        id: Int,
-        theme: String,
-        title: String,
-        solution: String,
-        hint: String,
-        difficulty: PuzzleDifficulty,
-        rewardStickerId: Int
-    ): WordPuzzle {
-        val uppercase = solution.uppercase()
-        val scrambled = uppercase.toList().shuffled(Random(id))
-        return WordPuzzle(
-            id = id,
-            theme = theme,
-            title = title,
-            solution = uppercase,
-            hint = hint,
-            difficulty = difficulty,
-            rewardStickerId = rewardStickerId,
-            scrambledLetters = scrambled
-        )
-    }
 
     fun getAllPuzzles(): List<WordPuzzle> = puzzles
 
