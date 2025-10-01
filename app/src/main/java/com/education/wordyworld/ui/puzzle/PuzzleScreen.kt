@@ -12,12 +12,14 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,8 +51,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.input.pointer.consume
+import androidx.compose.ui.input.pointer.consumePositionChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -163,18 +166,30 @@ private fun PuzzleHeader(state: PuzzleUiState) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                StatChip(label = "Timer", value = state.elapsedSeconds.toClock())
-                StatChip(label = "Score", value = state.score.toString())
-                StatChip(label = "Words Left", value = state.remainingWords.toString())
+                StatChip(
+                    label = "Timer",
+                    value = state.elapsedSeconds.toClock(),
+                    modifier = Modifier.weight(1f)
+                )
+                StatChip(
+                    label = "Score",
+                    value = state.score.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                StatChip(
+                    label = "Words Left",
+                    value = state.remainingWords.toString(),
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
 }
 
 @Composable
-private fun StatChip(label: String, value: String) {
+private fun StatChip(label: String, value: String, modifier: Modifier = Modifier) {
     Surface(
-        modifier = Modifier.weight(1f),
+        modifier = modifier,
         shape = RoundedCornerShape(20.dp),
         tonalElevation = 6.dp,
         color = MaterialTheme.colorScheme.surfaceVariant
@@ -259,13 +274,14 @@ private fun WordSearchGrid(
     val rows = puzzle.grid.size
     val columns = puzzle.grid.firstOrNull()?.length ?: 0
     val cellSpacing = 4.dp
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val highlightColors = remember {
+    val density = LocalDensity.current
+    val colorScheme = MaterialTheme.colorScheme
+    val highlightColors = remember(colorScheme) {
         listOf(
-            MaterialTheme.colorScheme.primaryContainer,
-            MaterialTheme.colorScheme.tertiaryContainer,
-            MaterialTheme.colorScheme.secondaryContainer,
-            MaterialTheme.colorScheme.inversePrimary
+            colorScheme.primaryContainer,
+            colorScheme.tertiaryContainer,
+            colorScheme.secondaryContainer,
+            colorScheme.inversePrimary
         )
     }
     val foundCells = remember(state.foundWordPaths) {
@@ -369,7 +385,7 @@ private fun WordSearchGrid(
                                     if (position != null) {
                                         onContinueSelection(position)
                                     }
-                                    change.consume()
+                                    change.consumePositionChange()
                                 },
                                 onDragEnd = { onEndSelection() },
                                 onDragCancel = { onEndSelection() }
