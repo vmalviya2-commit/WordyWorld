@@ -278,9 +278,9 @@ private fun WordSearchGrid(
     val colorScheme = MaterialTheme.colorScheme
     val highlightColors = remember(colorScheme) {
         listOf(
-            colorScheme.primaryContainer,
-            colorScheme.tertiaryContainer,
-            colorScheme.secondaryContainer,
+            colorScheme.primary,
+            colorScheme.tertiary,
+            colorScheme.secondary,
             colorScheme.inversePrimary
         )
     }
@@ -307,24 +307,13 @@ private fun WordSearchGrid(
         val cellSizePx = with(density) { cellSize.toPx() }
         val spacingPx = with(density) { cellSpacing.toPx() }
         val strokeWidth = with(density) { 6.dp.toPx() }
+        val highlightStrokeWidth = remember(cellSizePx, spacingPx) {
+            if (cellSizePx <= 0f) strokeWidth else (cellSizePx + spacingPx * 0.6f).coerceAtLeast(strokeWidth)
+        }
         val paletteSize = highlightColors.size
 
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Box(modifier = Modifier.size(gridSize)) {
-                Canvas(modifier = Modifier.matchParentSize()) {
-                    state.foundWordPaths.forEach { (word, path) ->
-                        val color = highlightColors[abs(word.hashCode()) % paletteSize]
-                        path.zipWithNext { start, end ->
-                            drawLine(
-                                color = color,
-                                start = start.toCenterOffset(cellSizePx, spacingPx),
-                                end = end.toCenterOffset(cellSizePx, spacingPx),
-                                strokeWidth = strokeWidth,
-                                cap = StrokeCap.Round
-                            )
-                        }
-                    }
-                }
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(cellSpacing)
@@ -340,16 +329,30 @@ private fun WordSearchGrid(
                                 val isActive = position in activePositions
                                 val isFound = foundWord != null
                                 val isHint = hintPosition == position
+                                val baseHighlight = foundWord?.let { highlightColors[abs(it.hashCode()) % paletteSize] }
                                 val backgroundColor = when {
-                                    isActive -> MaterialTheme.colorScheme.secondaryContainer
-                                    isHint -> MaterialTheme.colorScheme.tertiaryContainer
-                                    isFound -> highlightColors[abs(foundWord!!.hashCode()) % paletteSize]
-                                    else -> MaterialTheme.colorScheme.surfaceVariant
+                                    isActive -> colorScheme.secondaryContainer
+                                    isHint -> colorScheme.tertiaryContainer
+                                    isFound -> baseHighlight?.copy(alpha = 0.22f) ?: colorScheme.primary.copy(alpha = 0.18f)
+                                    else -> colorScheme.surface
+                                }
+                                val borderColor = when {
+                                    isActive -> colorScheme.secondary
+                                    isHint -> colorScheme.tertiary
+                                    isFound -> baseHighlight ?: colorScheme.primary
+                                    else -> colorScheme.outlineVariant
+                                }
+                                val foregroundColor = when {
+                                    isActive || isHint -> colorScheme.onPrimary
+                                    isFound -> colorScheme.onPrimary
+                                    else -> colorScheme.onSurface
                                 }
                                 LetterCell(
                                     letter = character,
                                     size = cellSize,
                                     backgroundColor = backgroundColor,
+                                    borderColor = borderColor,
+                                    contentColor = foregroundColor,
                                     isFound = isFound,
                                     isActive = isActive,
                                     isHint = isHint
@@ -358,17 +361,29 @@ private fun WordSearchGrid(
                         }
                     }
                 }
-                val activePathColor = MaterialTheme.colorScheme.secondary
                 Canvas(modifier = Modifier.matchParentSize()) {
-                    state.activePath.zipWithNext { start, end ->
-                        drawLine(
-                            color = activePathColor,
-                            start = start.toCenterOffset(cellSizePx, spacingPx),
-                            end = end.toCenterOffset(cellSizePx, spacingPx),
-                            strokeWidth = strokeWidth,
-                            cap = StrokeCap.Round
+                    state.foundWordPaths.forEach { (word, path) ->
+                        val color = highlightColors[abs(word.hashCode()) % paletteSize]
+                        drawWordPath(
+                            path = path,
+                            cellSize = cellSizePx,
+                            spacing = spacingPx,
+                            color = color,
+                            strokeWidth = highlightStrokeWidth,
+                            alpha = 0.35f
                         )
                     }
+                }
+                val activePathColor = colorScheme.secondary
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    drawWordPath(
+                        path = state.activePath,
+                        cellSize = cellSizePx,
+                        spacing = spacingPx,
+                        color = activePathColor,
+                        strokeWidth = highlightStrokeWidth,
+                        alpha = 0.8f
+                    )
                 }
                 Box(
                     modifier = Modifier
@@ -428,17 +443,16 @@ private fun LetterCell(
     letter: Char,
     size: Dp,
     backgroundColor: Color,
+    borderColor: Color,
+    contentColor: Color,
     isFound: Boolean,
     isActive: Boolean,
     isHint: Boolean
 ) {
-    val textColor = if (isFound || isActive || isHint) {
-        MaterialTheme.colorScheme.onPrimaryContainer
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
     Surface(
-        modifier = Modifier.size(size),
+        modifier = Modifier
+            .size(size)
+            .border(width = 1.5.dp, color = borderColor, shape = RoundedCornerShape(10.dp)),
         shape = RoundedCornerShape(12.dp),
         color = backgroundColor,
         tonalElevation = if (isFound || isActive) 4.dp else 0.dp,
@@ -449,10 +463,49 @@ private fun LetterCell(
                 text = letter.toString(),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = textColor
+                color = contentColor
             )
         }
     }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawWordPath(
+    path: List<GridPosition>,
+    cellSize: Float,
+    spacing: Float,
+    color: Color,
+    strokeWidth: Float,
+    alpha: Float
+) {
+    if (path.isEmpty() || cellSize <= 0f) return
+    if (path.size == 1) {
+        drawCircle(
+            color = color,
+            radius = strokeWidth / 2f,
+            center = path.first().toCenterOffset(cellSize, spacing),
+            alpha = alpha
+        )
+        return
+    }
+
+    val drawPath = androidx.compose.ui.graphics.Path().apply {
+        moveTo(path.first().toCenterOffset(cellSize, spacing).x, path.first().toCenterOffset(cellSize, spacing).y)
+        path.drop(1).forEach { position ->
+            val center = position.toCenterOffset(cellSize, spacing)
+            lineTo(center.x, center.y)
+        }
+    }
+
+    drawPath(
+        path = drawPath,
+        color = color,
+        alpha = alpha,
+        style = androidx.compose.ui.graphics.drawscope.Stroke(
+            width = strokeWidth,
+            cap = StrokeCap.Round,
+            join = androidx.compose.ui.graphics.StrokeJoin.Round
+        )
+    )
 }
 
 @Composable
