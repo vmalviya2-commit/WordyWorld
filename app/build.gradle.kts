@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.education.wordyworld"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.education.wordyworld"
-        minSdk = 32
-        targetSdk = 36
+        minSdk = 24
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 

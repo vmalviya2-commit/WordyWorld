@@ -10,7 +10,8 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.WordyWorld">
+        android:theme="@style/Theme.WordyWorld"
+        tools:targetApi="34">
         <activity
             android:name=".MainActivity"
             android:exported="true"
